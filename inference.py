@@ -201,6 +201,8 @@ def run_episode(client: OpenAI, env_id: str, task_key: str, max_steps: int,
     history: List[str] = []
     rewards: List[float] = []
     steps_taken = 0
+    final_score = 0.0
+    success = False
 
     log_start(task=task_key, env=env_id, model=MODEL_NAME)
 
