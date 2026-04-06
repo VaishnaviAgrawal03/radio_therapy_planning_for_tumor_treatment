@@ -1,45 +1,131 @@
-# RadiotherapyPlanningEnv — Project Context
+# RadiotherapyPlanningEnv — Complete Project Context
 
-> Auto-generated project context file. Covers architecture, modules, data flow, and design decisions.
-
----
-
-## 1. Project Overview
-
-**RadiotherapyPlanningEnv** is a production-ready OpenEnv-compatible reinforcement learning environment that simulates radiotherapy treatment planning. An RL agent learns to place and optimize radiation beams to maximize tumor dose coverage while protecting surrounding organs-at-risk (OARs).
-
-**Clinical Motivation**: ~14 million cancer patients/year require radiotherapy. Manual treatment planning takes 2–4 hours per patient. This environment enables RL-based automation of beam placement and dose optimization.
-
-**Version**: 1.0.0  
-**License**: MIT  
-**Python requirement**: >=3.9  
-**OpenEnv spec**: https://github.com/openenv/openenv
+> Comprehensive onboarding document. Covers everything from clinical motivation to deployment, judging criteria, and every file in the codebase.
 
 ---
 
-## 2. Repository Structure
+## 1. What This Project Is
+
+**RadiotherapyPlanningEnv** is a Gymnasium-compatible RL environment for cancer radiotherapy treatment planning, built for the **Meta x Scaler PyTorch OpenEnv Hackathon**.
+
+An AI agent learns to place and optimize radiation beams to maximize tumor dose while protecting surrounding organs-at-risk (OARs) — a real clinical problem that takes human experts **2–4 hours per patient** (~14 million patients/year).
+
+**This is NOT a clinical tool.** It's a **benchmark environment** — a simplified but physically grounded simulation for testing RL algorithms on a meaningful problem.
+
+**Author:** Vaishnavi Agrawal (vagrawal_be22@thapar.edu)
+**Version:** 1.0.0
+**License:** MIT
+**Python:** >=3.10
+
+---
+
+## 2. Hackathon Context & Judging
+
+### What We Submit
+- **GitHub repo:** https://github.com/VaishnaviAgrawal03/radio_therapy_planning_for_tumor_treatment
+- **HuggingFace Space:** https://huggingface.co/spaces/VaishnaviAgrawal/RadiotherapyPlanningEnv
+- **Docker image:** ghcr.io/vaishnaviagrawal03/radiotherapy-env:latest
+
+### How Judging Works
+
+**Phase 1: Automated Validation (pass/fail gate)**
+- HF Space deploys and responds to `/reset` with 200
+- `openenv validate` passes (checks pyproject.toml, uv.lock, server/app.py, openenv-core dep)
+- Dockerfile builds
+- `inference.py` runs and produces scores
+- 3+ tasks with graders that produce scores in [0.0, 1.0]
+
+**Phase 2: Agentic Evaluation (scored)**
+- Judges re-run baseline agent
+- Standard Open LLM agent (e.g., Nemotron 3 Super) run against the environment
+- Score variance checked across episodes
+
+**Phase 3: Human Review**
+- Top submissions reviewed by Meta and HuggingFace engineers
+- Evaluated for real-world utility, creativity, and exploit checks
+
+### Scoring Breakdown
+
+| Category | Weight | What judges look for |
+|----------|--------|---------------------|
+| **Real-world utility** | 30% | Clinical domain, fills a gap, immediate value for RL community |
+| **Task & grader quality** | 25% | 3+ tasks, difficulty range, deterministic graders, hard task challenges frontier models |
+| **Environment design** | 20% | Clean reset(), well-designed spaces, dense reward signal, sensible episodes |
+| **Code quality & spec** | 15% | openenv validate passes, Docker builds, HF Space deploys, baseline reproduces |
+| **Creativity & novelty** | 10% | Novel domain, interesting reward design, engaging mechanics |
+
+### Pre-Submission Checklist
+
+| Requirement | Status |
+|------------|--------|
+| HF Space deploys | Done |
+| `/reset` returns 200 | Done |
+| `openenv validate` passes | Done |
+| Dockerfile builds | Done |
+| `inference.py` runs and produces scores | Done (aggregate 0.541) |
+| 3+ tasks with graders | Done (prostate, head_neck, pediatric_brain) |
+| Scores/rewards in [0.0, 1.0] range | Done |
+| Runs under 20 min on 2 vCPU / 8GB RAM | Done |
+
+### Mandatory Environment Variables for Inference
+
+```
+API_BASE_URL   — LLM API endpoint
+MODEL_NAME     — Model identifier
+HF_TOKEN       — HuggingFace / API key
+```
+
+### Required Log Format
+
+```
+[START] task={task} env={env_id} model={model_name}
+[STEP] step={n} action={action_str} reward={reward:.2f} done={bool} error={error_or_null}
+[END] success={bool} steps={n} score={score:.3f} rewards={r1,r2,...}
+```
+
+---
+
+## 3. Repository Structure
 
 ```
 radiotherapy-env/
-├── radiotherapy_env/          # Main Python package (RL environment)
-│   ├── __init__.py            # Gymnasium env registration
+├── inference.py               # LLM inference script (HACKATHON REQUIREMENT)
+├── openenv.yaml               # OpenEnv spec metadata
+├── pyproject.toml             # Python package config (required by openenv validate)
+├── setup.py                   # Legacy package config
+├── uv.lock                    # Dependency lock file (required by openenv validate)
+├── requirements.txt           # Pinned dependencies
+├── Dockerfile                 # Container build (port 7860, ~800MB)
+├── DEPLOY.sh                  # 11-step deployment guide
+├── README.md                  # Project docs + HF Space YAML frontmatter
+├── PROJECT_CONTEXT.md         # This file
+│
+├── radiotherapy_env/          # Main Python package
+│   ├── __init__.py            # Gymnasium env registration (3 envs)
 │   ├── env.py                 # Core RadiotherapyEnv class
-│   ├── physics/               # Dose calculation and patient models
+│   ├── physics/
 │   │   ├── dose_calculator.py # Pencil-beam dose model
 │   │   ├── dvh.py             # Dose-Volume Histogram computation
-│   │   └── phantom.py         # Patient anatomy + Beam dataclasses
-│   ├── tasks/                 # Task definitions per cancer type
+│   │   └── phantom.py         # Patient anatomy + Beam dataclasses + generators
+│   ├── tasks/
+│   │   ├── __init__.py        # TASK_REGISTRY dict
 │   │   ├── base_task.py       # Abstract base class
 │   │   ├── prostate.py        # Easy (2 OARs)
-│   │   ├── head_neck.py       # Medium (7 OARs)
-│   │   ├── pediatric_brain.py # Hard (brainstem-adjacent)
-│   │   └── __init__.py        # TASK_REGISTRY dict
-│   ├── reward/                # Reward and scoring
+│   │   ├── head_neck.py       # Medium (7 OARs, 0.95× difficulty scaling)
+│   │   └── pediatric_brain.py # Hard (brainstem penalty tiers)
+│   ├── reward/
 │   │   ├── reward_fn.py       # compute_reward() + compute_score()
 │   │   └── grader.py          # Auto-grading for leaderboard
 │   └── rendering/
 │       └── dose_heatmap.py    # RGB visualization (dose + DVH)
-├── baseline/                  # Training + evaluation scripts
+│
+├── server/                    # OpenEnv HTTP server (required by openenv validate)
+│   ├── __init__.py
+│   ├── app.py                 # FastAPI endpoints: /reset, /step, /state, /health, /metadata, /schema
+│   ├── models.py              # Pydantic: RadiotherapyAction, RadiotherapyObservation
+│   └── radiotherapy_environment.py  # Gymnasium → HTTP bridge
+│
+├── baseline/
 │   ├── train_ppo.py           # PPO training with stable-baselines3
 │   ├── evaluate.py            # Agent evaluation + heuristic baseline
 │   ├── results.json           # Aggregate benchmark results
@@ -48,25 +134,20 @@ radiotherapy-env/
 │   ├── results_pediatric_brain.json
 │   ├── logs/                  # TensorBoard event files
 │   └── models/                # Saved PPO model checkpoints
-│       ├── prostate_best/
-│       ├── head_neck_best/
-│       └── pediatric_brain_best/
+│       ├── prostate_best/best_model.zip
+│       ├── head_neck_best/best_model.zip
+│       └── pediatric_brain_best/best_model.zip
+│
 ├── app/
-│   └── app.py                 # Gradio interactive demo (HuggingFace Spaces)
-├── tests/
-│   └── test_env.py            # Comprehensive pytest suite
-├── app.py                     # Entry-point wrapper → app/app.py
-├── openenv.yaml               # OpenEnv spec metadata
-├── setup.py                   # Package build config (pip install)
-├── requirements.txt           # Pinned dependencies
-├── Dockerfile                 # Container build (port 7860)
-├── DEPLOY.sh                  # 11-step deployment guide
-└── README.md                  # Project documentation
+│   └── app.py                 # Gradio interactive demo
+│
+└── tests/
+    └── test_env.py            # 25 pytest tests
 ```
 
 ---
 
-## 3. Gymnasium Environment
+## 4. Gymnasium Environment
 
 ### Registration (`radiotherapy_env/__init__.py`)
 
@@ -78,154 +159,152 @@ Three environments registered via `gym.register()`:
 | `RadiotherapyEnv-headneck-v1` | head_neck | 60 | Medium |
 | `RadiotherapyEnv-pediatricbrain-v1` | pediatric_brain | 70 | Hard |
 
-**Usage**:
-```python
-import gymnasium as gym
-import radiotherapy_env  # triggers registration
-
-env = gym.make("RadiotherapyEnv-prostate-v1")
-obs, info = env.reset()
-```
-
 ### Core Environment (`radiotherapy_env/env.py`)
 
-**Class**: `RadiotherapyEnv(gym.Env)`
+**Class:** `RadiotherapyEnv(gym.Env)`
 
-**Constructor**: `__init__(task="prostate", max_steps=50, render_mode=None)`
-
-**Class Constants**:
-- `MAX_BEAMS = 7`
-- `GRID_SIZE = 64`
+**Class Constants:**
+- `MAX_BEAMS = 7` — maximum radiation beams per plan
+- `GRID_SIZE = 64` — patient phantom grid resolution
 - `_LOCK_PLAN_ACTION = 7` — action index that terminates the episode
 
-**Action Space**: `Discrete(8)`
+**Constructor:** `__init__(task="prostate", max_steps=50, render_mode=None)`
 
-| Action | Description |
-|--------|-------------|
-| 0 | Add beam at next default angle |
-| 1 | Rotate last beam +10° |
-| 2 | Rotate last beam -10° |
-| 3 | Increase dose weight |
-| 4 | Decrease dose weight |
-| 5 | Remove last beam |
-| 6 | Fine-tune all beams |
-| 7 | Lock plan (terminate episode) — matched via `_LOCK_PLAN_ACTION` |
+**Instance Fields:**
+- `self.dose_calculator` — `DoseCalculator(grid_size=64)`
+- `self.dvh_calculator` — `DVHCalculator(n_bins=50)`
+- `self.patient` — current `PatientPhantom` (set in reset)
+- `self.beams` — list of `Beam` objects
+- `self.step_count` — steps taken
+- `self.current_dose` — 64×64 dose grid
+- `self._last_reward` — reward from previous step
 
-**Observation Space**: `Dict`
+### Action Space — `Discrete(8)`
 
-| Key | Shape | Description |
-|-----|-------|-------------|
-| `dvh_tumor` | Box(50,) | Cumulative DVH for tumor |
-| `dvh_oar` | Box(3, 50) | DVH for top 3 OARs |
-| `beams` | Box(7, 3) | [normalized_angle, dose_weight, is_active] per beam |
-| `constraints` | Box(4,) | Normalized constraint violations [tumor, oar1, oar2, oar3] |
-| `step_frac` | Box(1,) | Episode progress fraction |
+| Action | Description | Implementation Detail |
+|--------|-------------|----------------------|
+| 0 | Add beam at next default angle | Angle: `len(beams) × (180/7) + noise(±5°)`, weight: 0.6 |
+| 1 | Rotate last beam +10° | `(angle + 10) % 180` |
+| 2 | Rotate last beam -10° | `(angle - 10) % 180` |
+| 3 | Increase dose weight | `min(1.0, weight + 0.1)` |
+| 4 | Decrease dose weight | `max(0.1, weight - 0.1)` |
+| 5 | Remove last beam | `beams.pop()` |
+| 6 | Fine-tune all beams | All beams: angle ±3°, weight ±0.05 |
+| 7 | Lock plan (terminate) | No-op; termination handled in `step()` |
 
-**Instance Fields**:
-- `self.dose_calculator` — `DoseCalculator` instance
-- `self.dvh_calculator` — `DVHCalculator` instance
+### Observation Space — `Dict`
 
-**Key Methods**:
+| Key | Shape | Range | Description |
+|-----|-------|-------|-------------|
+| `dvh_tumor` | Box(50,) | [0, 1] | Cumulative DVH for tumor (50 bins) |
+| `dvh_oar` | Box(3, 50) | [0, 1] | DVH for top 3 OARs |
+| `beams` | Box(7, 3) | [0, 1] | `[angle/180, dose_weight, is_active]` per beam |
+| `constraints` | Box(4,) | [0, 2] | `[tumor_uncoverage, oar1_violation, oar2_violation, oar3_violation]` |
+| `step_frac` | Box(1,) | [0, 1] | `step_count / max_steps` |
 
-- `reset(seed)` — Samples new patient from task generator, initializes beams
-- `step(action)` — Applies action, recomputes dose, returns (obs, reward, terminated, truncated, info)
-- `state()` — Returns full state dict (OpenEnv spec compliance)
-- `render()` — Returns RGB numpy array via `render_heatmap()`
-- `get_score()` — Returns final plan quality score [0.0, 1.0]
-- `get_dvh_summary()` — Returns DVH metrics dict
+### Key Methods
 
-**Episode Flow**:
-1. `reset()` → sample patient → initialize beams → compute dose → return obs
-2. Per step: `_apply_action()` → `DoseCalculator.compute()` → `DVHCalculator.compute()` → reward → obs
-3. Termination: `action == _LOCK_PLAN_ACTION` (lock plan) OR `step >= max_steps`
+| Method | Returns | Purpose |
+|--------|---------|---------|
+| `reset(seed)` | `(obs, info)` | Sample new patient, initialize beams, compute dose |
+| `step(action)` | `(obs, reward, terminated, truncated, info)` | Apply action, recompute dose, return reward |
+| `state()` | `Dict` | Full state for OpenEnv spec (patient, beams, dose_grid, score) |
+| `render()` | `np.ndarray (H,W,3)` | RGB visualization via `render_heatmap()` |
+| `get_score()` | `float [0,1]` | Final plan quality via `compute_score()` |
+| `get_dvh_summary()` | `Dict` | DVH metrics (D95, coverage, OAR means/maxes) |
 
-**Design Notes**:
-- 64×64 grid resolution (speed/fidelity balance)
-- Max 7 beams (clinically realistic)
-- All observations normalized to [0, 1]
-- Dense per-step rewards
-- Beams initialized at evenly-spaced angles with small noise
-- Task validation raises `ValueError` (not `assert`) so it works under Python `-O` flag
+### Episode Flow
+
+```
+reset() → sample patient → init beams=[] → compute dose=zeros → return obs
+  ↓
+step(action) → _apply_action() → recompute dose → compute reward → check termination → return obs
+  ↓
+Terminates when: action==7 (lock plan) OR step_count >= max_steps
+```
+
+### Constraint Violations (`_get_constraint_violations()`)
+
+- `violations[0]` = 1.0 - tumor_coverage (0=perfect, 1=no coverage)
+- `violations[1-3]` = max(0, (mean_oar_dose - limit) / limit) per OAR
 
 ---
 
-## 4. Physics Layer
-
-### Patient & Beam Models (`radiotherapy_env/physics/phantom.py`)
-
-**Module constant**: `_GRID_SIZE = 64` — shared by all patient generators (no per-class duplication)
-
-**`Beam` (dataclass)**:
-- `angle: float` — beam direction [0, 180°)
-- `dose_weight: float` — relative beam strength [0.1, 1.0]
-- `to_dict()` — serialization
-
-**`OAR` (dataclass)**:
-- `name: str`, `mask: np.ndarray`, `limit: float`, `priority: int`
-- Priority: 1=critical, 2=important, 3=moderate
-
-**`PatientPhantom` (dataclass)**:
-- `case_id`, `grid_size`, `tumor_mask`, `oars`, `prescription_dose`, `body_mask`
-- `tumor_center: Tuple[float, float]` — isocenter (x, y) for beam convergence
-- `tumor_radius: float`
-
-**`case_id` format** (aligned with task registry keys):
-- Prostate: `"prostate_<NNNN>"`
-- Head & neck: `"head_neck_<NNNN>"`
-- Pediatric brain: `"pediatric_brain_<NNNN>"`
-
-**Patient Generators** (one per task, all accept `rng: np.random.Generator`):
-
-| Generator | Task | Tumor Shape | OARs | Constraints |
-|-----------|------|-------------|------|-------------|
-| `ProstatePatientGenerator` | Easy | Spherical | Rectum (ellipse), Bladder (circle) | 0.40, 0.50 Gy |
-| `HeadNeckPatientGenerator` | Medium | Rotatable ellipse | Spinal cord, Brainstem, 2×Parotids, Mandible, Larynx, Esophagus | 0.25–0.60 Gy |
-| `PediatricBrainPatientGenerator` | Hard | Circle 2-3mm from brainstem | Brainstem, Optic chiasm, 2×Cochlea, Whole brain | 0.20–0.60 Gy |
-
-**Mask generation utilities**: `_make_circular_mask()`, `_make_elliptical_mask()`, `_make_rect_mask()`
+## 5. Physics Layer
 
 ### Dose Calculator (`radiotherapy_env/physics/dose_calculator.py`)
 
-**Class**: `DoseCalculator(grid_size=64, beam_width_sigma=4.0, attenuation_mu=0.012, prescription_dose=1.0)`
+**Class:** `DoseCalculator(grid_size=64, beam_width_sigma=4.0, attenuation_mu=0.012, prescription_dose=1.0)`
 
-**Class Constant**: `BEAM_SCALE = 0.40` — calibrated so 7 converging beams ≈ 1.0 Gy at isocenter
+**Class Constant:** `BEAM_SCALE = 0.40` — calibrated so 7 converging beams ≈ 1.0 Gy at isocenter
 
-**`compute(patient, beams) → np.ndarray`** — Superposition of single-beam contributions
+**Pre-computed:** Coordinate meshgrids `_cx`, `_cy` cached in `__init__`
 
-**`_compute_single_beam(beam, body_mask, isocenter: Optional[Tuple[float, float]])`** — Gaussian pencil-beam model:
-1. Coordinate transform to isocenter-centered system (uses `patient.tumor_center` directly)
-2. Lateral distance from beam axis → Gaussian profile
-3. Depth along beam axis → exponential attenuation
-4. Multiply by `dose_weight × BEAM_SCALE`
-5. Apply `body_mask` (zero outside patient)
+#### `compute(patient, beams) → np.ndarray (64×64)`
 
-**`get_dvh_summary(dose, patient) → dict`** — DVH metrics (D95, Dmean, Dmax, coverage, OAR violations).
-Always returns all four tumor keys (`tumor_d95`, `tumor_dmean`, `tumor_dmax`, `tumor_coverage`) even when the tumor mask is empty.
+Superposition of single-beam contributions. All beams converge at `patient.tumor_center` (isocenter), not grid center.
 
-**Design Notes**:
-- Pre-computed meshgrids `_cx`, `_cy` cached in `__init__`
-- No scatter modeling (speed trade-off acceptable for RL)
-- `BEAM_SCALE` is a class constant — tune it there, not inline
-- Dose normalized to prescription dose (scale invariance across tasks)
+#### `_compute_single_beam(beam, body_mask, isocenter) → np.ndarray (64×64)`
+
+Gaussian pencil-beam model:
+
+```
+beam_dose = profile × attenuation × dose_weight × BEAM_SCALE × body_mask
+```
+
+1. **Coordinate transform:** Shift grid to isocenter-centered system
+2. **Lateral distance:** Perpendicular distance from beam axis → `lateral = -cx×sin(a) + cy×cos(a)`
+3. **Gaussian profile:** `exp(-0.5 × (lateral / sigma)²)` — beam width controlled by sigma=4.0
+4. **Depth attenuation:** `exp(-mu × depth_norm × grid_size)` — Beer-Lambert Law
+5. **Scale:** Multiply by `dose_weight × BEAM_SCALE`
+6. **Body mask:** Zero dose outside patient body
+
+**Physics trade-off:** Fast (~ms/compute) vs accurate (no scatter, no tissue-dependent attenuation, 2D only). Suitable for RL training, not clinical use.
+
+#### `get_dvh_summary(dose, patient) → Dict`
+
+Returns: `tumor_d95`, `tumor_dmean`, `tumor_dmax`, `tumor_coverage`, and per-OAR `oar_<name>_mean`, `oar_<name>_max`, `oar_<name>_limit`, `oar_<name>_violation`.
+
+Always emits all four tumor keys even when tumor mask is empty (returns 0.0).
 
 ### DVH Calculator (`radiotherapy_env/physics/dvh.py`)
 
-**Class**: `DVHCalculator(n_bins=50, max_dose_factor=2.0)`
+**Class:** `DVHCalculator(n_bins=50, max_dose_factor=2.0)`
 
-**`compute(dose, mask, reference_dose) → np.ndarray`** — Cumulative DVH:
-- Extracts voxel doses inside mask
-- Normalizes by reference dose
-- For each of 50 bins: computes fraction of voxels ≥ threshold
+**`compute(dose, mask, reference_dose) → np.ndarray (50,)`**
+
+Cumulative DVH: for each of 50 bins from 0 to 2.0, computes fraction of voxels ≥ threshold.
+
+- Reference dose = prescription (tumor) or limit (OAR) for normalization
 - Returns float32 array shape (50,)
 
-**Design Notes**:
-- Cumulative (not differential) DVH — better for constraint checking
-- Fixed 50 bins as compact RL observation
-- Reference dose handles both prescription (tumor) and limit (OAR) contexts
+### Patient & Beam Models (`radiotherapy_env/physics/phantom.py`)
+
+**Module constant:** `_GRID_SIZE = 64`
+
+**`Beam` dataclass:** `angle: float [0, 180)`, `dose_weight: float [0.1, 1.0]`, `to_dict()`
+
+**`OAR` dataclass:** `name: str`, `mask: np.ndarray`, `limit: float`, `priority: int` (1=critical, 2=important, 3=moderate)
+
+**`PatientPhantom` dataclass:** `case_id`, `grid_size`, `tumor_mask`, `oars: List[OAR]`, `prescription_dose`, `body_mask`, `tumor_center: Tuple[float, float]`, `tumor_radius: float`
+
+**Mask utilities:** `_make_circular_mask()`, `_make_elliptical_mask()` (supports rotation), `_make_rect_mask()`
+
+### Patient Generators
+
+| Generator | Task | Tumor Shape | OARs | Dose Limits |
+|-----------|------|-------------|------|-------------|
+| `ProstatePatientGenerator` | Easy | Circle r∈[5,8] | Rectum (ellipse, limit=0.40, P1), Bladder (circle, limit=0.50, P2) | Generous |
+| `HeadNeckPatientGenerator` | Medium | Rotatable ellipse | 7 OARs: Spinal cord (P1, 0.45), Brainstem (P1, 0.45), 2×Parotids (P2, 0.26), Mandible (P3, 0.60), Larynx (P2, 0.40), Esophagus (P2, 0.34) | Tight |
+| `PediatricBrainPatientGenerator` | Hard | Circle 2-3 voxels from brainstem | 5 OARs: Brainstem (P1, 0.30), Optic chiasm (P1, 0.25), 2×Cochlea (P2, 0.20), Whole brain (P3, 0.60) | Very tight |
+
+**Key difficulty mechanic (Pediatric Brain):** Tumor is positioned 2-3 voxels from brainstem using a random angle offset. The near-zero margin makes conformal beam placement extremely challenging.
+
+**`case_id` format:** `"prostate_NNNN"`, `"head_neck_NNNN"`, `"pediatric_brain_NNNN"`
 
 ---
 
-## 5. Task System
+## 6. Task System
 
 ### Abstract Base (`radiotherapy_env/tasks/base_task.py`)
 
@@ -240,17 +319,22 @@ class BaseTask(ABC):
 
 ### Task Implementations
 
-| File | Class | Reward Modification |
-|------|-------|---------------------|
-| `prostate.py` | `ProstateTask` | None — direct `compute_reward()` passthrough |
-| `head_neck.py` | `HeadNeckTask` | `base_reward × 0.95` (difficulty scaling) |
-| `pediatric_brain.py` | `PediatricBrainTask` | Graduated brainstem penalty (0.30×, 0.55×, 0.75×, 1.0×) |
+| Task | Class | Patient Generator | Reward Modification |
+|------|-------|-------------------|---------------------|
+| Prostate | `ProstateTask` | `ProstatePatientGenerator` | None — direct `compute_reward()` |
+| Head & Neck | `HeadNeckTask` | `HeadNeckPatientGenerator` | `base_reward × 0.95` (5% difficulty scaling) |
+| Pediatric Brain | `PediatricBrainTask` | `PediatricBrainPatientGenerator` | Graduated brainstem penalty |
 
-**Pediatric brain penalty tiers**:
-- `brainstem_mean > 1.5 × limit` → multiplier 0.30 (severe)
-- `brainstem_mean > 1.2 × limit` → multiplier 0.55 (moderate)
-- `brainstem_mean > 1.0 × limit` → multiplier 0.75 (mild)
-- compliant → multiplier 1.0 (no penalty)
+### Pediatric Brain Brainstem Penalty
+
+Finds "Brainstem" OAR and applies multipliers based on mean dose violation:
+
+| Condition | Multiplier | Severity |
+|-----------|-----------|----------|
+| `bs_mean > 1.5 × limit` | 0.30 | Severe |
+| `bs_mean > 1.2 × limit` | 0.55 | Moderate |
+| `bs_mean > 1.0 × limit` | 0.75 | Mild |
+| compliant | 1.0 | No penalty |
 
 ### Task Registry (`radiotherapy_env/tasks/__init__.py`)
 
@@ -264,27 +348,38 @@ TASK_REGISTRY = {
 
 ---
 
-## 6. Reward & Scoring System
+## 7. Reward & Scoring System
 
-### Training Reward (`radiotherapy_env/reward/reward_fn.py` — `compute_reward()`)
+### Training Reward (`compute_reward()`)
 
 Dense per-step reward, range [0.0, 1.0]:
 
 ```
-reward = tumor_coverage × 0.50 − oar_penalty × 0.40 + plan_efficiency × 0.10
+reward = tumor_coverage × 0.55 − oar_penalty × 0.40 + plan_efficiency × 0.05
 ```
 
-**Tumor coverage** (weight 0.50):
-- `0.8 × fraction_tumor_at_95pct_Rx + 0.2 × min(1, mean_dose / Rx_dose)`
+**Tumor coverage (0.55):**
+```
+0.5 × min(1.0, D95 / prescription_dose) + 0.5 × coverage_at_95%
+```
+- D95 = `np.percentile(tumor_dose, 5)` — dose to coldest 5% of tumor
+- coverage_at_95% = fraction of tumor voxels with dose ≥ 0.95 × prescription
 
-**OAR penalty** (weight 0.40):
-- Per OAR: mean violation + max violation (critical organs only, priority=1)
-- Weighted by priority: critical=1.5, important=1.0, moderate=0.5
-- Normalized by total weight, capped at 2.0× limit
+**OAR penalty (0.40):**
+- Critical organs (P1): steep ramp, full penalty at 10% above limit
+  - `mean_violation = min(1.0, max(0, mean_dose - limit) / (0.1 × limit))`
+  - `max_violation = min(1.0, max(0, max_dose - 1.05×limit) / (0.1 × limit))`
+  - Combined: `0.5 × mean + 0.5 × max`
+- Non-critical (P2, P3): linear, full penalty at 50% above limit
+  - `violation = min(1.0, max(0, mean_dose - limit) / (0.5 × limit))`
+- Weighted by priority: `PRIORITY_WEIGHTS = {1: 1.5, 2: 1.0, 3: 0.5}`
+- Normalized by total weight, capped at 1.0
 
-**Plan efficiency** (weight 0.10):
-- Optimal beam count: 5–7 (peak at 6)
-- `0.7 × beam_efficiency + 0.3 × weight_efficiency`
+**Plan efficiency (0.05):**
+```
+max(0.0, 1.0 - abs(n_beams - 6) / 7.0)
+```
+Peak at 6 beams.
 
 ### Final Score (`compute_score()`)
 
@@ -294,167 +389,294 @@ Stricter clinical evaluation, range [0.0, 1.0]:
 score = tumor_score × 0.55 + oar_score × 0.40 + efficiency_score × 0.05
 ```
 
-- Tumor: D95 metric + coverage at 95% Rx
-- OAR: Per-OAR score stored in `individual_score`; mean across OARs stored in `mean_oar_score` (no variable shadowing)
-- Efficiency: same beam count formula
+**Key difference from training reward:**
+- Critical OARs use **binary pass/fail** (not gradient):
+  - `mean_ok = mean_dose <= limit` → True/False
+  - `max_ok = max_dose <= 1.05×limit` → True/False
+  - Score = `0.5 × float(mean_ok) + 0.5 × float(max_ok)` → either 0.0, 0.5, or 1.0
+- Non-critical OARs: same linear gradient as training
+- OAR scores averaged (not penalty-subtracted)
 
-**Priority weights**: `PRIORITY_WEIGHTS = {1: 1.5, 2: 1.0, 3: 0.5}`
+**Why two functions?** Training reward gives gradient signal for learning ("getting warmer"). Score gives strict pass/fail for evaluation ("did you pass?"). An agent that scores well on compute_reward() should also score well on compute_score() because they use identical metrics and weights.
 
 ### Auto-Grader (`radiotherapy_env/reward/grader.py`)
 
 ```python
-grade_task(env_id, agent_fn, n_episodes=20, seed=42) -> dict
-grade_all(agent_fn, n_episodes=20, seed=42) -> dict
+grade_task(env_id, agent_fn, n_episodes=20, seed=42) → Dict
+grade_all(agent_fn, n_episodes=20, seed=42) → Dict
 ```
 
-- `import radiotherapy_env` is at module level (triggers gym registration on import)
-- Each episode uses seed+ep for diverse evaluation
+- Each episode uses `seed + ep` for diversity
 - Pass rate threshold: score ≥ 0.60
 - Returns: mean, std, min, max, pass_rate, scores list
-- `grade_all()` aggregates three tasks arithmetically
+- `grade_all()` averages across three tasks
 
 ---
 
-## 7. Rendering (`radiotherapy_env/rendering/dose_heatmap.py`)
+## 8. Rendering (`radiotherapy_env/rendering/dose_heatmap.py`)
 
-**`render_heatmap(dose: np.ndarray, patient: "PatientPhantom", beams: "List[Beam]", reward, step, size=512) → np.ndarray`**
+**`render_heatmap(dose, patient, beams, reward, step, size=512) → np.ndarray (H,W,3)`**
 
-Returns uint8 RGB array (H, W, 3). Two-panel matplotlib figure.
+Two-panel matplotlib figure (dark theme #0d1117):
 
-**Imports**: `matplotlib`, `PIL.Image`, and related modules are imported at module level inside a `try/except ImportError`. The `_MATPLOTLIB_AVAILABLE` flag controls runtime fallback. `PatientPhantom` and `Beam` are imported under `TYPE_CHECKING` only (no circular import risk).
-
-**Left panel — Dose heatmap**:
-- Custom colormap: dark blue → cyan → yellow → red → white
-- Contours: body (white), tumor (green `#00ff88`), OARs by priority (red/orange/blue)
+**Left panel — Dose heatmap:**
+- Custom 7-color colormap: dark blue → cyan → yellow → red → white
+- Contours: body (white), tumor (green #00ff88), OARs by priority (red/orange/blue)
 - Beam arrows converging at tumor isocenter; opacity ∝ dose_weight
-- Dark theme background `#0d1117`
 
-**Right panel — DVH curves**:
+**Right panel — DVH curves:**
 - Tumor: green; each OAR: colored by priority
 - Prescription reference line + OAR dose limit lines
-- Cumulative dose-volume on both axes
 
-**Fallback**: `_simple_render()` — minimal RGB without matplotlib:
-- Blue channel = dose, green channel = tumor, red channel = OARs
+**Fallback:** `_simple_render()` — minimal RGB without matplotlib (blue=dose, green=tumor, red=OARs)
+
+Imports are inside `try/except ImportError`; `_MATPLOTLIB_AVAILABLE` flag controls runtime fallback.
 
 ---
 
-## 8. Baseline Training & Evaluation
+## 9. Inference Script (`inference.py`)
 
-### PPO Training (`baseline/train_ppo.py`)
+**This is the MAIN file the judges run.**
 
-**Algorithm**: PPO via stable-baselines3, `MultiInputPolicy`
+### Configuration (env vars)
 
-**Hyperparameters**:
-- learning_rate=3e-4, n_steps=512, batch_size=64, n_epochs=10
-- gamma=0.99, gae_lambda=0.95, clip_range=0.2, ent_coef=0.01
-- Network: policy [256, 256], value [256, 256]
-- 4 parallel vectorized envs during training
+```python
+API_KEY = os.getenv("HF_TOKEN") or os.getenv("API_KEY")
+API_BASE_URL = os.getenv("API_BASE_URL") or "https://router.huggingface.co/v1"
+MODEL_NAME = os.getenv("MODEL_NAME") or "Qwen/Qwen2.5-72B-Instruct"
+TEMPERATURE = 0.3
+MAX_TOKENS = 100
+N_EPISODES = 3  # per task
+SUCCESS_SCORE_THRESHOLD = 0.1
+```
 
-**Training budget** (used in `--all` mode):
-| Task | Timesteps | CPU time |
+### System Prompt
+
+Instructs LLM to:
+- Add 5-6 beams first (action 0)
+- Adjust angles to avoid organs (actions 1, 2)
+- Increase/decrease dose based on constraints (actions 3, 4)
+- Fine-tune for final optimization (action 6)
+- Lock plan when satisfied (action 7)
+- Reply with ONLY a single digit (0-7)
+
+### How It Works
+
+1. **format_observation()** converts numeric obs to readable text:
+   - Beam angles and weights
+   - Constraint violations (0=perfect, higher=worse)
+   - DVH summary (D95, coverage)
+   - Current score
+   - Recent action history (last 5)
+
+2. **get_llm_action()** sends observation to LLM, parses first digit 0-7 from response
+
+3. **Fallback strategy** when LLM fails:
+   - Step ≤ 6: action 0 (add beams)
+   - Step < max_steps - 2: action 6 (fine-tune)
+   - Otherwise: action 7 (lock plan)
+
+4. **run_episode()** runs one full episode with [START]/[STEP]/[END] logging
+
+5. **main()** runs all 3 tasks × 3 episodes each, prints aggregate score
+
+### Tested Results (Llama 3.3 70B via Groq)
+
+| Task | Mean Score | Episodes |
 |------|-----------|----------|
-| Prostate | 200K | ~15 min |
-| Head & Neck | 350K | ~25 min |
-| Pediatric Brain | 1M | ~50 min |
-
-**Saved artifacts**:
-- `baseline/models/{task}_best/best_model.zip`
-- `baseline/models/{task}_checkpoints/` (periodic)
-- `baseline/logs/{task}/` (TensorBoard)
-
-### Evaluation (`baseline/evaluate.py`)
-
-**Agents**:
-- `random_agent(obs, env)` — random action baseline
-- `smart_heuristic_agent(obs, env)` — stage-based rule system:
-  - Steps 0–30: Add beams if < 6 active
-  - Steps 30–40: Rotate/increase-dose/fine-tune based on constraint violations
-  - Steps 40+: Lock plan
-
-### Benchmark Results (`baseline/results.json`)
-
-| Task | Difficulty | Mean Score | Std | Pass Rate | Timesteps |
-|------|------------|------------|-----|-----------|-----------|
-| Prostate | Easy | 0.697 | ±0.054 | 100% | 200K |
-| Head & Neck | Medium | 0.750 | ±0.059 | 96.7% | 350K |
-| Pediatric Brain | Hard | 0.717 | ±0.090 | 95.0% | 1M |
-| **Aggregate** | — | **0.721** | — | — | — |
+| Prostate | 0.540 | 3 |
+| Head & Neck | 0.560 | 3 |
+| Pediatric Brain | 0.523 | 3 |
+| **Aggregate** | **0.541** | 9 |
 
 ---
 
-## 9. Interactive Demo (`app/app.py`)
+## 10. OpenEnv HTTP Server (`server/`)
 
-**Framework**: Gradio, targeting HuggingFace Spaces
+Required by `openenv validate` for multi-mode deployment.
 
-**Features**:
+### Endpoints (`server/app.py`)
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/health` | GET | Returns `{"status": "healthy"}` |
+| `/metadata` | GET | Returns name, description, version, tasks list |
+| `/schema` | GET | Returns Pydantic JSON schemas for action/observation/state |
+| `/reset` | POST | Accepts `{"task": "prostate"}`, returns observation + reward + done |
+| `/step` | POST | Accepts `{"action": 0}`, returns observation + reward + done |
+| `/state` | GET | Returns full internal env state |
+
+### Pydantic Models (`server/models.py`)
+
+**RadiotherapyAction:** `action: int` (0-7, validated with ge=0, le=7)
+
+**RadiotherapyObservation:** dvh_tumor, dvh_oar, beams, constraints, step_frac, score, n_beams, task
+
+### Environment Wrapper (`server/radiotherapy_environment.py`)
+
+Bridges Gymnasium to HTTP: converts numpy arrays to JSON-serializable lists, maps task names to env IDs, manages env lifecycle (close previous on reset).
+
+### Entry Point
+
+```python
+# In pyproject.toml:
+[project.scripts]
+server = "server.app:main"
+
+# Run:
+uv run server
+# or:
+uvicorn server.app:app --host 0.0.0.0 --port 8000
+```
+
+---
+
+## 11. PPO Baseline Training (`baseline/train_ppo.py`)
+
+### Hyperparameters
+
+```python
+PPO("MultiInputPolicy", vec_env,
+    learning_rate=3e-4,
+    n_steps=512,           # steps before update
+    batch_size=64,
+    n_epochs=10,           # SGD passes per batch
+    gamma=0.99,            # discount factor
+    gae_lambda=0.95,       # advantage estimation
+    clip_range=0.2,        # PPO clip
+    ent_coef=0.01,         # exploration bonus
+    policy_kwargs=dict(
+        net_arch=dict(pi=[256, 256], vf=[256, 256])
+    )
+)
+```
+
+### Training Configuration
+
+- 4 parallel vectorized envs for faster data collection
+- EvalCallback: every ~10K steps, evaluate on 10 episodes, save best model
+- CheckpointCallback: every ~20K steps, save intermediate model
+
+### Training Budget
+
+| Task | Timesteps | CPU Time | Patients Seen |
+|------|-----------|----------|---------------|
+| Prostate | 200K | ~15 min | ~5,000 |
+| Head & Neck | 350K | ~25 min | ~7,000 |
+| Pediatric Brain | 1M | ~50 min | ~15,000 |
+
+### PPO Benchmark Results
+
+| Task | Mean Score | Std | Pass Rate |
+|------|-----------|-----|-----------|
+| Prostate | 0.697 | ±0.054 | 100% |
+| Head & Neck | 0.750 | ±0.059 | 96.7% |
+| Pediatric Brain | 0.717 | ±0.090 | 95.0% |
+| **Aggregate** | **0.721** | — | — |
+
+---
+
+## 12. Baseline Evaluation (`baseline/evaluate.py`)
+
+### Agents
+
+**`random_agent(obs, env)`** — random action (baseline floor, ~0.15 score)
+
+**`smart_heuristic_agent(obs, env)`** — rule-based:
+- Steps 0-30: Add beams if < 6 active
+- Steps 30-40: Rotate/increase-dose/fine-tune based on constraint violations
+- Steps 40+: Lock plan
+
+**PPO agent** — loads `baseline/models/{task}_best/best_model.zip`, deterministic prediction
+
+---
+
+## 13. Gradio Demo (`app/app.py`)
+
+**Framework:** Gradio, port 7860, targeting HuggingFace Spaces
+
+### Features
 - Task selector (3 difficulty levels)
 - Seed slider (0–999) for reproducibility
-- Agent auto-play (trained PPO or heuristic fallback)
-- Human manual play (8 action buttons)
+- "Watch PPO Agent Plan" — runs trained agent (or heuristic fallback)
+- Manual play with 8 action buttons
 - Side-by-side human vs. agent score comparison
 - Dual-axis reward/score chart (teal + purple, dark theme)
 - Episode log with color-coded actions
 
-**Model loading**: `load_model(task_key)` — iterates `MODEL_CANDIDATES[task_key]` (ordered list of paths per task), tries each with and without `.zip` extension, returns first successful load or `None` (heuristic fallback). Bug fixed: previously always loaded `path` instead of the matched `candidate`.
+### Model Loading (`load_model`)
 
-**Model path config**: `MODEL_CANDIDATES` — single dict mapping each task key to an ordered list of candidate paths (replaces the former `MODEL_PATHS` + `MODEL_PATHS_FALLBACK` pair).
+Iterates `MODEL_CANDIDATES[task_key]` (ordered list of paths), tries each with/without `.zip`, returns first success or `None` (heuristic fallback).
 
-**Heuristic fallback**: `heuristic_action(obs, step)` — fully deterministic (no `np.random`); uses `step % 2` alternation where rotation direction was previously random.
+### Heuristic Fallback (`heuristic_action`)
 
-**Session state**: Dict tracking env, obs, step count, reward/score history, human and agent scores
+Fully deterministic (no `np.random`); uses `step % 2` for rotation direction.
 
----
+### Session State
 
-## 10. Tests (`tests/test_env.py`)
-
-Four test classes:
-
-| Class | Tests | Coverage |
-|-------|-------|----------|
-| `TestGymnasiumCompliance` | 8 | Env registration, obs validity, seed reproducibility, state(), truncation, termination |
-| `TestPhysics` | 5 | Zero-beam dose, positive dose, grid shape, body mask enforcement, multi-beam coverage |
-| `TestReward` | 4 | Zero-beam reward, reward growth, score range, per-step computation |
-| `TestTaskDifficulty` | 4 | OAR counts (2/7/5), brainstem proximity (<15 voxels), task runnability |
-
-**Run** (requires `pip install -e .[dev]` first — no `sys.path` hacks needed):
-```bash
-pytest tests/ -v
+```python
+session = {
+    "env": env, "obs": dict, "done": bool, "step": int,
+    "total_reward": float, "history": list,
+    "reward_history": list, "score_history": list,
+    "human_score": float | None, "agent_score": float | None,
+}
 ```
 
 ---
 
-## 11. Deployment
+## 14. Tests (`tests/test_env.py`)
+
+**Run:** `pytest tests/ -v` — 25 tests, all must pass
+
+| Class | Tests | Coverage |
+|-------|-------|----------|
+| `TestGymnasiumCompliance` | 8+ | Env registration, obs validity, seed reproducibility, state(), truncation, termination |
+| `TestPhysics` | 5 | Zero-beam dose, positive dose, grid shape, body mask enforcement, multi-beam coverage |
+| `TestReward` | 4 | Zero-beam reward, reward growth, score range, per-step computation |
+| `TestTaskDifficulty` | 4+ | OAR counts (2/7/5), brainstem proximity (<15 voxels), all tasks runnable |
+
+---
+
+## 15. Deployment
 
 ### Docker (`Dockerfile`)
 
 - Base: `python:3.10-slim`
-- Port: 7860 (Gradio default)
-- Env: `MPLBACKEND=Agg` (headless matplotlib)
+- System deps: `libgl1`, `libglib2.0-0`, `libsm6`, `libxext6`, `libxrender-dev`
+- Env vars: `PYTHONUNBUFFERED=1`, `MPLBACKEND=Agg`
+- Port: 7860
 - Healthcheck: creates env, resets, closes
 - Default CMD: `python app/app.py`
 
-### DEPLOY.sh (11-step guide)
+### HuggingFace Space
 
-1. Python version check
-2. venv setup
-3. `pip install -e .[training,demo,dev]`
-4. Inline sanity check (env create + random run)
-5. `pytest tests/ -v`
-6. Train all PPO agents
-7. Evaluate + save results.json
-8. Launch Gradio demo
-9. Docker build + healthcheck
-10. Push to HuggingFace Spaces
-11. Push to GitHub Container Registry
+- **URL:** https://huggingface.co/spaces/VaishnaviAgrawal/RadiotherapyPlanningEnv
+- **SDK:** Docker (Blank template)
+- **Hardware:** CPU Basic (free)
+- **README frontmatter:** YAML with `sdk: docker`
+- **Git remote:** `hf` → `https://huggingface.co/spaces/VaishnaviAgrawal/RadiotherapyPlanningEnv`
+- **Auth:** Token embedded in remote URL
+- **LFS:** `.zip` files tracked with Git LFS (required by HF)
 
-### openenv.yaml
+### GitHub
 
-OpenEnv spec metadata file covering: name/version/description, task definitions, action/observation spaces, reward structure, baseline results, installation instructions, and quick start code.
+- **URL:** https://github.com/VaishnaviAgrawal03/radio_therapy_planning_for_tumor_treatment
+- **Git remote:** `origin` → `git@github2:VaishnaviAgrawal03/...` (uses second SSH key)
+- **SSH config:** `~/.ssh/config` maps `github2` host to `id_ed25519_github2` key
+
+### OpenEnv Validation
+
+`openenv validate` checks:
+1. `pyproject.toml` exists
+2. `uv.lock` exists
+3. `[project.scripts]` has `server` entry point
+4. `openenv-core>=0.2.0` in dependencies
+5. `server/app.py` exists with `def main()` and `if __name__ == "__main__": main()`
 
 ---
 
-## 12. Data Flow
+## 16. Data Flow
 
 ```
 Task Selection (string key)
@@ -467,66 +689,128 @@ task.sample_patient(rng) → PatientPhantom
         │                   (tumor_mask, OARs, prescription_dose, body_mask, tumor_center)
         ▼
 DoseCalculator.compute(patient, beams)
-        │ Gaussian pencil-beam superposition
+        │ Gaussian pencil-beam superposition at isocenter
         ▼
 dose: np.ndarray (64×64, float32)
         │
         ├──► DVHCalculator.compute(dose, mask, ref) → dvh: np.ndarray (50,)
         │    [per structure: tumor + each OAR]
         │
-        ├──► compute_reward(dose, patient, beams) → float  [training]
+        ├──► compute_reward(dose, patient, beams) → float  [training, gradient signal]
         │
-        ├──► compute_score(dose, patient, beams) → float   [grading]
+        ├──► compute_score(dose, patient, beams) → float   [grading, binary for critical OARs]
         │
-        ├──► _get_obs() → Dict observation
+        ├──► _get_obs() → Dict observation [dvh_tumor, dvh_oar, beams, constraints, step_frac]
         │
-        └──► render_heatmap(dose, patient, beams) → uint8 RGB
+        └──► render_heatmap(dose, patient, beams) → uint8 RGB [two-panel: dose + DVH]
 ```
 
 ---
 
-## 13. Dependencies
+## 17. Dependencies
 
-**Core** (always required):
-- `gymnasium>=0.29.0` — RL framework
-- `numpy>=1.24.0` — numerical computing
-- `matplotlib>=3.7.0` — visualization
-- `Pillow>=9.0.0` — image processing
-- `scikit-image>=0.20.0` — contour extraction
-- `pyyaml>=6.0` — YAML parsing
-
-**Training** (`pip install .[training]`):
-- `stable-baselines3>=2.0.0`
-- `torch>=2.0.0`
-
-**Demo** (`pip install .[demo]`):
-- `gradio>=4.0.0`
-
-**Dev** (`pip install .[dev]`):
-- `pytest>=7.0.0`
-- `pytest-cov>=4.0.0`
+| Category | Packages | Purpose |
+|----------|----------|---------|
+| Core | gymnasium, numpy | RL framework, numerics |
+| Visualization | matplotlib, Pillow, scikit-image | Dose heatmap, contours |
+| OpenEnv | openenv-core, fastapi, uvicorn, pydantic | Server endpoints, validation |
+| Config | pyyaml | YAML parsing |
+| Training (optional) | stable-baselines3, torch | PPO agent |
+| Inference (optional) | openai | LLM API client |
+| Demo (optional) | gradio | Web UI |
+| Dev (optional) | pytest, pytest-cov | Testing |
 
 ---
 
-## 14. Key Design Decisions
+## 18. Key Design Decisions
 
 | Decision | Rationale |
 |----------|-----------|
-| 64×64 grid | Balances spatial fidelity with RL training speed |
+| 64×64 grid | Balances fidelity with RL training speed |
 | Max 7 beams | Clinically realistic IMRT constraint |
-| Gaussian pencil-beam model | Fast approximation (no Monte Carlo) suitable for thousands of RL episodes |
-| Discrete(8) action space | Clinically meaningful actions, small enough for efficient exploration |
-| Dense rewards | Per-step signal accelerates RL convergence |
+| Gaussian pencil-beam model | Fast (~ms) vs Monte Carlo (minutes). Preserves core trade-offs |
+| Discrete(8) action space | Clinically meaningful, small enough for exploration |
+| Dense per-step rewards | Enables gradient-based RL learning (not sparse end-of-episode) |
 | Normalized observations [0,1] | Improves neural network training stability |
-| Three task tiers | Graduated difficulty mirrors real clinical complexity progression |
-| Separate compute_reward / compute_score | Training uses dense partial reward; evaluation uses strict clinical criteria |
-| Priority-weighted OAR penalties | Reflects clinical priority (spinal cord more critical than salivary glands) |
-| Gradio + HuggingFace deployment | Accessible demo without local setup |
+| Three task tiers | Graduated difficulty for curriculum learning research |
+| Separate reward vs score | Training needs smooth gradients; evaluation needs strict clinical criteria |
+| Priority-weighted OAR penalties | Reflects clinical reality (spinal cord > salivary glands) |
+| Beams converge at tumor center | Realistic isocenter targeting, not grid center |
+| DVH as observation | Compact, rotation-invariant, clinically standard representation |
+| Beam angles [0, 180) not [0, 360) | Avoids redundancy (opposite angles equivalent) |
+| Gradio + HF Spaces | Accessible demo without local setup |
 | OpenEnv spec compliance | Standardized interface for benchmark comparability |
+| FastAPI server endpoints | Required by openenv validate for multi-mode deployment |
 
 ---
 
-## 15. Environment IDs Quick Reference
+## 19. Refactoring Changelog (v1.0.0)
+
+### Bugs Fixed
+- B1: `app.py` `load_model` now loads correct candidate (was always loading `path`)
+- B2: `reward_fn.py` `compute_score` early-exit guard aligned with `compute_reward`
+- B3: `grader.py` removed dead `episode_score = 0.0` assignment
+- B4: `dose_calculator.py` `get_dvh_summary` always emits all four tumor keys
+
+### Dead Code Removed
+- D1-D2: Removed unused `import numpy` from prostate.py and head_neck.py
+- D3: Removed stale comment from dose_calculator.py
+- D4: Cleaned module docstring and dev comments from app.py
+- D5: Moved `import radiotherapy_env` to module level in grader.py
+
+### Code Quality
+- Q1: `from .physics.phantom import Beam` moved to module-level in env.py
+- Q2: `assert task in TASK_REGISTRY` → `if … raise ValueError`
+- Q3: Added `_LOCK_PLAN_ACTION = 7` class constant
+- Q4: Matplotlib imports moved to module-level try/except
+- Q5: `BEAM_SCALE = 0.40` promoted to class constant
+- Q6: Three duplicate `GRID = 64` → single `_GRID_SIZE = 64`
+- Q7: Removed `sys.path.insert` hacks from tests and baseline scripts
+- Q8: `heuristic_action` made deterministic (no `np.random.choice`)
+
+### Naming
+- N1: `case_id` prefixes aligned to task registry keys
+- N2: Variable shadowing in `compute_score` fixed: `individual_score` + `mean_oar_score`
+- N3: `self.calculator` → `self.dose_calculator`; `self.dvh_calc` → `self.dvh_calculator`
+- N4: `MODEL_PATHS` + `MODEL_PATHS_FALLBACK` → single `MODEL_CANDIDATES`
+
+### Type Annotations
+- T1: `patient: "PatientPhantom"` and `beams: "List[Beam]"` via TYPE_CHECKING guard
+- T2: `isocenter: Optional[Tuple[float, float]]`; direct `patient.tumor_center`
+- T3: `tumor_center: Tuple[float, float]` (was plain `tuple`)
+
+### Minor Fixes
+- M1: Pediatric brain timesteps corrected to 1M (was 500K)
+- M2: `_blank_image_small()` merged into `_blank_image(height, width)`
+
+---
+
+## 20. Configuration Quick Reference
+
+| Setting | Value |
+|---------|-------|
+| Grid resolution | 64×64 |
+| Max beams | 7 |
+| Beam width sigma | 4.0 |
+| Attenuation mu | 0.012 |
+| Beam scale | 0.40 |
+| DVH bins | 50 |
+| DVH max dose factor | 2.0 |
+| Reward weights | tumor=0.55, OAR=0.40, efficiency=0.05 |
+| Priority weights | P1=1.5, P2=1.0, P3=0.5 |
+| Pass threshold | score ≥ 0.60 |
+| Optimal beam count | 6 |
+| PPO learning rate | 3e-4 |
+| PPO gamma | 0.99 |
+| PPO clip range | 0.2 |
+| PPO network | 256×256 (policy + value) |
+| LLM temperature | 0.3 |
+| LLM max tokens | 100 |
+| Docker port | 7860 (Gradio), 8000 (FastAPI) |
+
+---
+
+## 21. Environment IDs Quick Reference
 
 ```python
 # Easy (2 OARs, 50 steps)
@@ -538,59 +822,3 @@ env = gym.make("RadiotherapyEnv-headneck-v1")
 # Hard (brainstem-adjacent, 70 steps)
 env = gym.make("RadiotherapyEnv-pediatricbrain-v1")
 ```
-
----
-
-## 16. Refactoring Changelog (v1.0.0 → clean state)
-
-Applied after initial submission to bring the codebase to onboarding-ready quality. All 25 tests pass.
-
-### Bugs Fixed
-| ID | File | Description |
-|----|------|-------------|
-| B1 | `app/app.py` | `load_model` now calls `PPO.load(candidate)` — previously always loaded `path` regardless of which candidate existed |
-| B2 | `reward/reward_fn.py` | `compute_score` early-exit guard aligned with `compute_reward` (removed spurious `or dose is None`) |
-| B3 | `reward/grader.py` | Removed dead `episode_score = 0.0` initialization immediately overwritten on the next line |
-| B4 | `physics/dose_calculator.py` | `get_dvh_summary` now always emits all four tumor keys (`tumor_d95`, `tumor_dmean`, `tumor_dmax`, `tumor_coverage`) even when the tumor mask is empty |
-
-### Dead Code Removed
-| ID | File | Description |
-|----|------|-------------|
-| D1 | `tasks/prostate.py` | Removed unused `import numpy as np` |
-| D2 | `tasks/head_neck.py` | Removed unused `import numpy as np` |
-| D3 | `physics/dose_calculator.py` | Removed stale `# Keep raw accumulated dose — raw pass` comment |
-| D4 | `app/app.py` | Cleaned module docstring; removed inline `# FIX 1/2/3` development comments |
-| D5 | `reward/grader.py` | Moved `import radiotherapy_env` from inside `grade_task()` to module level |
-
-### Code Quality
-| ID | File | Description |
-|----|------|-------------|
-| Q1 | `env.py` | `from .physics.phantom import Beam` moved to module-level imports |
-| Q2 | `env.py` | `assert task in TASK_REGISTRY` replaced with `if … raise ValueError` |
-| Q3 | `env.py` | Added `_LOCK_PLAN_ACTION = 7` class constant; `step()` uses it instead of bare `7` |
-| Q4 | `rendering/dose_heatmap.py` | `matplotlib.use("Agg")` and related imports moved to module-level `try/except` block |
-| Q5 | `physics/dose_calculator.py` | `BEAM_SCALE = 0.40` promoted to class constant |
-| Q6 | `physics/phantom.py` | Three duplicate `GRID = 64` class attributes replaced with module-level `_GRID_SIZE = 64` |
-| Q7 | `tests/test_env.py`, `baseline/train_ppo.py`, `baseline/evaluate.py` | Removed `sys.path.insert` hacks (package must be installed with `pip install -e .`) |
-| Q8 | `app/app.py` | `heuristic_action` no longer uses `np.random.choice`; uses deterministic `step % 2` alternation |
-
-### Naming
-| ID | File | Description |
-|----|------|-------------|
-| N1 | `physics/phantom.py` | `case_id` prefixes aligned to task registry keys: `headneck_` → `head_neck_`, `pedibrain_` → `pediatric_brain_` |
-| N2 | `reward/reward_fn.py` | Variable shadowing in `compute_score` fixed: loop variable → `individual_score`, aggregate → `mean_oar_score` |
-| N3 | `env.py` | `self.calculator` → `self.dose_calculator`; `self.dvh_calc` → `self.dvh_calculator` |
-| N4 | `app/app.py` | `MODEL_PATHS` + `MODEL_PATHS_FALLBACK` merged into `MODEL_CANDIDATES` (ordered list per task) |
-
-### Type Annotations
-| ID | File | Description |
-|----|------|-------------|
-| T1 | `rendering/dose_heatmap.py` | `patient: "PatientPhantom"` and `beams: "List[Beam]"` via `TYPE_CHECKING` guard |
-| T2 | `physics/dose_calculator.py` | `isocenter: Optional[Tuple[float, float]]`; direct `patient.tumor_center` replaces `getattr` fallback |
-| T3 | `physics/phantom.py` | `tumor_center: Tuple[float, float]` (was plain `tuple`) |
-
-### Minor Fixes
-| ID | File | Description |
-|----|------|-------------|
-| M1 | `baseline/train_ppo.py` | `pediatric_brain` timesteps in `--all` mode corrected from `500_000` to `1_000_000` (matches docs and results) |
-| M2 | `app/app.py` | `_blank_image_small()` merged into `_blank_image(height=400, width=900)` with optional size parameters |
