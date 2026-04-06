@@ -1,12 +1,11 @@
 """
-HuggingFace Spaces — Interactive Demo (v2 - Full Improvements)
-==============================================================
-Improvements over v1:
-  1. ✅ Trained PPO agent (FIXED — model path bug fixed, task name mapping fixed)
-  2. ✅ Reward curve chart — live episode reward plot
-  3. ✅ Human vs Agent comparison mode
-  4. ✅ openenv.yaml real scores shown in UI
-  5. ✅ Better episode log with color-coded score progress
+HuggingFace Spaces — Interactive Demo
+======================================
+Features:
+  - Trained PPO agent auto-play with heuristic fallback
+  - Live reward/score chart per episode
+  - Human vs Agent comparison mode
+  - Episode log with color-coded score progress
 """
 
 import os
@@ -41,18 +40,11 @@ TASK_MAP = {
     "Pediatric Brain (Hard)": ("pediatric_brain",   "RadiotherapyEnv-pediatricbrain-v1"),
 }
 
-# FIX 1: Correct model paths — match exactly what train_ppo.py saves
-MODEL_PATHS = {
-    "prostate":        "baseline/models/prostate_best/best_model",
-    "head_neck":       "baseline/models/head_neck_best/best_model",
-    "pediatric_brain": "baseline/models/pediatric_brain_best/best_model",
-}
-
-# Fallback to _final if _best doesn't exist
-MODEL_PATHS_FALLBACK = {
-    "prostate":        "baseline/models/prostate_final",
-    "head_neck":       "baseline/models/head_neck_final",
-    "pediatric_brain": "baseline/models/pediatric_brain_final",
+# Ordered list of candidate model paths per task (tried in order, first match wins)
+MODEL_CANDIDATES = {
+    "prostate":        ["baseline/models/prostate_best/best_model",  "baseline/models/prostate_final"],
+    "head_neck":       ["baseline/models/head_neck_best/best_model",  "baseline/models/head_neck_final"],
+    "pediatric_brain": ["baseline/models/pediatric_brain_best/best_model", "baseline/models/pediatric_brain_final"],
 }
 
 ACTION_LABELS = {
@@ -84,10 +76,10 @@ session = {
     "step": 0,
     "total_reward": 0.0,
     "history": [],
-    "reward_history": [],    # NEW: for reward curve
-    "score_history": [],     # NEW: for score curve
-    "human_score": None,     # NEW: for comparison
-    "agent_score": None,     # NEW: for comparison
+    "reward_history": [],
+    "score_history": [],
+    "human_score": None,
+    "agent_score": None,
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -102,20 +94,15 @@ def load_model(task_key: str):
     if not SB3_AVAILABLE:
         return None
 
-    # Try best model path first
-    primary = MODEL_PATHS.get(task_key, "")
-    fallback = MODEL_PATHS_FALLBACK.get(task_key, "")
-
-    for path in [primary, fallback]:
-        # Try with .zip and without
+    for path in MODEL_CANDIDATES.get(task_key, []):
         for candidate in [path + ".zip", path]:
             if os.path.exists(candidate):
                 try:
-                    model = PPO.load(path)  # SB3 handles .zip automatically
-                    print(f"✓ Loaded PPO model: {path}")
+                    model = PPO.load(candidate)  # SB3 handles .zip automatically
+                    print(f"✓ Loaded PPO model: {candidate}")
                     return model
                 except Exception as e:
-                    print(f"⚠ Could not load {path}: {e}")
+                    print(f"⚠ Could not load {candidate}: {e}")
 
     print(f"⚠ No trained model found for '{task_key}'. Using heuristic fallback.")
     return None
@@ -137,7 +124,7 @@ def heuristic_action(obs: dict, step: int) -> int:
         if tumor_uncov > 0.6:
             return 3
         elif max_oar_viol > 0.6:
-            return np.random.choice([1, 2])
+            return 1 if (step % 2 == 0) else 2  # deterministic alternation
         return 6
     elif step < 56:
         if tumor_uncov > 0.4:
@@ -185,12 +172,8 @@ def reset_env(task_name: str, seed: int = 42):
 
 
 def run_agent(task_name: str, seed: int = 42):
-    """
-    Run trained PPO agent (with heuristic fallback).
-    FIX 2: task_name is now the display name e.g. "Head & Neck (Medium)"
-    — we map it to the task key correctly.
-    """
-    task_key = TASK_MAP[task_name][0]   # FIX: was using task_name directly before
+    """Run trained PPO agent (with heuristic fallback) for one full episode."""
+    task_key = TASK_MAP[task_name][0]
     env_id   = TASK_MAP[task_name][1]
 
     env = gym.make(env_id, render_mode="rgb_array")
@@ -212,7 +195,6 @@ def run_agent(task_name: str, seed: int = 42):
     ]
 
     while not done and step < 70:
-        # FIX 3: action must be Python int, not numpy int64
         if model is not None:
             raw_action, _ = model.predict(obs, deterministic=True)
             action = int(raw_action)
@@ -391,7 +373,7 @@ def _make_reward_chart(reward_hist: list, score_hist: list):
 
     except Exception as e:
         print(f"Chart error: {e}")
-        return _blank_image_small()
+        return _blank_image(height=280, width=800)
 
 
 def _format_metrics(obs, info, last_reward, step, done):
@@ -430,11 +412,8 @@ def _format_metrics(obs, info, last_reward, step, done):
     return "\n".join(lines)
 
 
-def _blank_image():
-    return Image.fromarray(np.zeros((400, 900, 3), dtype=np.uint8))
-
-def _blank_image_small():
-    return Image.fromarray(np.zeros((280, 800, 3), dtype=np.uint8))
+def _blank_image(height: int = 400, width: int = 900):
+    return Image.fromarray(np.zeros((height, width, 3), dtype=np.uint8))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -465,7 +444,7 @@ BENCHMARK_MD = """
 > Score ≥ 0.6 = clinically acceptable plan. Pediatric Brain is the hardest case in clinical radiotherapy.
 """
 
-with gr.Blocks(title="RadiotherapyPlanningEnv", theme=gr.themes.Soft()) as demo:
+with gr.Blocks(title="RadiotherapyPlanningEnv") as demo:
 
     gr.Markdown(DESCRIPTION)
 
@@ -564,4 +543,4 @@ with gr.Blocks(title="RadiotherapyPlanningEnv", theme=gr.themes.Soft()) as demo:
 
 
 if __name__ == "__main__":
-    demo.launch(server_name="0.0.0.0", server_port=7860, share=False)
+    demo.launch(server_name="0.0.0.0", server_port=7860, share=False, theme=gr.themes.Soft())

@@ -37,7 +37,7 @@ import gymnasium as gym
 from gymnasium import spaces
 from typing import Optional, Dict, Any, Tuple
 
-from .physics.phantom import PatientPhantom
+from .physics.phantom import PatientPhantom, Beam
 from .physics.dose_calculator import DoseCalculator
 from .physics.dvh import DVHCalculator
 from .reward.reward_fn import compute_reward, compute_score
@@ -56,7 +56,8 @@ class RadiotherapyEnv(gym.Env):
     metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 4}
 
     MAX_BEAMS = 7
-    GRID_SIZE = 64  # patient phantom grid resolution
+    GRID_SIZE = 64          # patient phantom grid resolution
+    _LOCK_PLAN_ACTION = 7   # action index that terminates the episode
 
     def __init__(
         self,
@@ -72,14 +73,15 @@ class RadiotherapyEnv(gym.Env):
         """
         super().__init__()
 
-        assert task in TASK_REGISTRY, f"Task '{task}' not found. Choose from {list(TASK_REGISTRY.keys())}"
+        if task not in TASK_REGISTRY:
+            raise ValueError(f"Task '{task}' not found. Choose from {list(TASK_REGISTRY.keys())}")
         self.task_name = task
         self.task = TASK_REGISTRY[task]()
         self.max_steps = max_steps
         self.render_mode = render_mode
 
-        self.calculator = DoseCalculator(grid_size=self.GRID_SIZE)
-        self.dvh_calc = DVHCalculator(n_bins=50)
+        self.dose_calculator = DoseCalculator(grid_size=self.GRID_SIZE)
+        self.dvh_calculator = DVHCalculator(n_bins=50)
 
         # ── Action Space ──────────────────────────────────────────────────────
         self.action_space = spaces.Discrete(8)
@@ -136,7 +138,7 @@ class RadiotherapyEnv(gym.Env):
         self._apply_action(int(action))
 
         # Recompute dose distribution
-        self.current_dose = self.calculator.compute(self.patient, self.beams)
+        self.current_dose = self.dose_calculator.compute(self.patient, self.beams)
 
         # Compute reward
         reward = compute_reward(self.current_dose, self.patient, self.beams)
@@ -145,7 +147,7 @@ class RadiotherapyEnv(gym.Env):
         self.step_count += 1
 
         # Check termination
-        if action == 7:  # lock plan
+        if action == self._LOCK_PLAN_ACTION:
             terminated = True
         elif self.step_count >= self.max_steps:
             truncated = True
@@ -218,7 +220,7 @@ class RadiotherapyEnv(gym.Env):
         """Return key DVH metrics for the current plan."""
         if self.patient is None or self.current_dose is None:
             return {}
-        return self.calculator.get_dvh_summary(self.current_dose, self.patient)
+        return self.dose_calculator.get_dvh_summary(self.current_dose, self.patient)
 
     # ──────────────────────────────────────────────────────────────────────────
     # Internal helpers
@@ -232,7 +234,6 @@ class RadiotherapyEnv(gym.Env):
                 base_angle = len(self.beams) * (180.0 / self.MAX_BEAMS)
                 # Add small noise for diversity
                 angle = base_angle + self.np_random.uniform(-5, 5)
-                from .physics.phantom import Beam
                 self.beams.append(Beam(angle=angle % 180, dose_weight=0.6))
 
         elif action == 1:  # Rotate last beam +10°
@@ -273,11 +274,11 @@ class RadiotherapyEnv(gym.Env):
         dvh_oar = np.zeros((3, 50), dtype=np.float32)
 
         if self.patient is not None and self.current_dose is not None:
-            dvh_tumor = self.dvh_calc.compute(
+            dvh_tumor = self.dvh_calculator.compute(
                 self.current_dose, self.patient.tumor_mask, self.patient.prescription_dose
             )
             for i, oar in enumerate(self.patient.oars[:3]):
-                dvh_oar[i] = self.dvh_calc.compute(
+                dvh_oar[i] = self.dvh_calculator.compute(
                     self.current_dose, oar.mask, oar.limit
                 )
 
@@ -330,7 +331,7 @@ class RadiotherapyEnv(gym.Env):
             "task": self.task_name,
         }
         if self.patient is not None and self.current_dose is not None:
-            info["dvh_summary"] = self.calculator.get_dvh_summary(
+            info["dvh_summary"] = self.dose_calculator.get_dvh_summary(
                 self.current_dose, self.patient
             )
             info["score"] = self.get_score()

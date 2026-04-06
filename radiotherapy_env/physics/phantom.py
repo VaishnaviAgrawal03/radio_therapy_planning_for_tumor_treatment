@@ -9,8 +9,11 @@ All coordinates are in grid units (0 to GRID_SIZE-1).
 """
 
 from dataclasses import dataclass, field
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Tuple
 import numpy as np
+
+# Grid resolution used by all patient generators
+_GRID_SIZE = 64
 
 
 @dataclass
@@ -54,7 +57,7 @@ class PatientPhantom:
     body_mask: np.ndarray        # patient body outline
 
     # Metadata
-    tumor_center: tuple = (32, 32)
+    tumor_center: Tuple[float, float] = (32, 32)
     tumor_radius: float = 8.0
 
     def to_dict(self) -> Dict[str, Any]:
@@ -104,10 +107,9 @@ class ProstatePatientGenerator:
     Task 1 (Easy): Prostate cancer.
     Simple spherical tumor in pelvis, 2 OARs: rectum and bladder.
     """
-    GRID = 64
 
     def generate(self, rng: np.random.Generator) -> PatientPhantom:
-        G = self.GRID
+        G = _GRID_SIZE
 
         # Tumor: prostate gland (center of pelvis)
         cx = rng.uniform(28, 36)
@@ -153,10 +155,9 @@ class HeadNeckPatientGenerator:
     Irregular tumor, 7 critical OARs: spinal cord, both parotids,
     mandible, larynx, brainstem, esophagus.
     """
-    GRID = 64
 
     def generate(self, rng: np.random.Generator) -> PatientPhantom:
-        G = self.GRID
+        G = _GRID_SIZE
 
         # Tumor: oropharynx (off-center, irregular)
         cx = rng.uniform(26, 38)
@@ -205,7 +206,7 @@ class HeadNeckPatientGenerator:
         ]
 
         return PatientPhantom(
-            case_id=f"headneck_{int(rng.integers(1000, 9999))}",
+            case_id=f"head_neck_{int(rng.integers(1000, 9999))}",
             grid_size=G,
             tumor_mask=tumor_mask,
             oars=oars,
@@ -222,10 +223,9 @@ class PediatricBrainPatientGenerator:
     Tumor is 2-3mm from critical brainstem. Maximum precision required.
     Any overdose = catastrophic penalty.
     """
-    GRID = 64
 
     def generate(self, rng: np.random.Generator) -> PatientPhantom:
-        G = self.GRID
+        G = _GRID_SIZE
 
         # Brainstem: center of the challenge
         bs_cx = G // 2 + rng.uniform(-3, 3)
@@ -271,7 +271,7 @@ class PediatricBrainPatientGenerator:
         ]
 
         return PatientPhantom(
-            case_id=f"pedibrain_{int(rng.integers(1000, 9999))}",
+            case_id=f"pediatric_brain_{int(rng.integers(1000, 9999))}",
             grid_size=G,
             tumor_mask=tumor_mask,
             oars=oars,

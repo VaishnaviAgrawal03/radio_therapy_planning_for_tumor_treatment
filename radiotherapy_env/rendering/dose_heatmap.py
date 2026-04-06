@@ -13,11 +13,27 @@ Renders the current treatment plan as an RGB image showing:
 import numpy as np
 from typing import List, Optional
 
+try:
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import matplotlib.patches as mpatches
+    from matplotlib.colors import LinearSegmentedColormap
+    import io
+    from PIL import Image as _PILImage
+    _MATPLOTLIB_AVAILABLE = True
+except ImportError:
+    _MATPLOTLIB_AVAILABLE = False
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from ..physics.phantom import PatientPhantom, Beam
+
 
 def render_heatmap(
     dose: np.ndarray,
-    patient,
-    beams: list,
+    patient: "PatientPhantom",
+    beams: "List[Beam]",
     reward: float = 0.0,
     step: int = 0,
     size: int = 512,
@@ -28,16 +44,7 @@ def render_heatmap(
     Returns:
         RGB image as (H, W, 3) uint8 numpy array
     """
-    try:
-        import matplotlib
-        matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
-        import matplotlib.patches as mpatches
-        from matplotlib.colors import LinearSegmentedColormap
-        import io
-        from PIL import Image
-    except ImportError:
-        # Fallback: return a simple colored grid
+    if not _MATPLOTLIB_AVAILABLE:
         return _simple_render(dose, patient, size)
 
     G = dose.shape[0]
@@ -83,16 +90,27 @@ def render_heatmap(
                     linestyle="--" if oar.priority > 1 else "-", zorder=4)
         legend_patches.append(mpatches.Patch(color=color, label=oar.name))
 
-    # Beam directions
-    cx, cy = G // 2, G // 2
+    # Beam directions — converge on tumor center (isocenter)
+    # This matches dose_calculator which aims beams at tumor_center
+    if hasattr(patient, 'tumor_center') and patient.tumor_center is not None:
+        iso_x = float(patient.tumor_center[0])
+        iso_y = float(patient.tumor_center[1])
+    else:
+        iso_x, iso_y = G // 2, G // 2
+
     for beam in beams:
         angle_rad = np.deg2rad(beam.angle)
         r = G // 2 - 2
         dx = r * np.cos(angle_rad)
         dy = r * np.sin(angle_rad)
-        ax.annotate("", xy=(cx + dx, cy + dy), xytext=(cx - dx, cy - dy),
+        ax.annotate("", xy=(iso_x + dx, iso_y + dy), xytext=(iso_x - dx, iso_y - dy),
                     arrowprops=dict(arrowstyle="-", color="white",
                                     alpha=0.3 + 0.5 * beam.dose_weight, lw=1.2))
+
+    # White crosshair at isocenter = where all beams converge = tumor center
+    if beams:
+        ax.plot(iso_x, iso_y, "+", color="white", markersize=12,
+                markeredgewidth=2.0, alpha=0.9, zorder=10)
 
     ax.legend(handles=legend_patches, loc="upper right", fontsize=7,
               facecolor="#1a1a2e", edgecolor="#333", labelcolor="white")
@@ -154,7 +172,7 @@ def render_heatmap(
     fig.savefig(buf, format="png", dpi=96, bbox_inches="tight",
                 facecolor="#0d1117")
     buf.seek(0)
-    img = Image.open(buf).convert("RGB")
+    img = _PILImage.open(buf).convert("RGB")
     frame = np.array(img)
     plt.close(fig)
     buf.close()

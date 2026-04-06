@@ -15,8 +15,6 @@ import argparse
 import json
 import numpy as np
 import gymnasium as gym
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import radiotherapy_env
 
 

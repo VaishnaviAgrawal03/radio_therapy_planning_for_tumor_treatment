@@ -19,8 +19,6 @@ import time
 
 import numpy as np
 import gymnasium as gym
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import radiotherapy_env  # registers all envs
 
 
@@ -188,7 +186,7 @@ def main():
         tasks = [
             ("prostate",       200_000),
             ("head_neck",      350_000),
-            ("pediatric_brain",500_000),
+            ("pediatric_brain",1_000_000),
         ]
         all_results = {}
         for task, ts in tasks:

@@ -8,6 +8,7 @@ Used by the OpenEnv leaderboard system.
 import numpy as np
 from typing import Dict, List
 import gymnasium as gym
+import radiotherapy_env  # noqa: F401 — registers all gym environments
 
 
 def grade_task(env_id: str, agent_fn, n_episodes: int = 20, seed: int = 42) -> Dict:
@@ -23,15 +24,12 @@ def grade_task(env_id: str, agent_fn, n_episodes: int = 20, seed: int = 42) -> D
     Returns:
         Dict with mean_score, std_score, min_score, max_score, pass_rate
     """
-    import radiotherapy_env  # ensure registration
-
     env = gym.make(env_id)
     scores = []
 
     for ep in range(n_episodes):
         obs, _ = env.reset(seed=seed + ep)
         done = False
-        episode_score = 0.0
 
         while not done:
             action = agent_fn(obs, env)

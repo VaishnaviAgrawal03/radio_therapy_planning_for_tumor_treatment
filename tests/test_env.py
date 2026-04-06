@@ -12,8 +12,6 @@ import numpy as np
 import gymnasium as gym
 from gymnasium.utils.env_checker import check_env
 
-import sys, os
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import radiotherapy_env
 from radiotherapy_env import RadiotherapyEnv
 from radiotherapy_env.physics.dose_calculator import DoseCalculator

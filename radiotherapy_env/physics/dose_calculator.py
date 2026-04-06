@@ -17,12 +17,15 @@ RL training episodes.
 """
 
 import numpy as np
-from typing import List, Dict
+from typing import List, Dict, Optional, Tuple
 from .phantom import PatientPhantom, Beam
 
 
 class DoseCalculator:
     """Fast approximate dose calculation for RL training."""
+
+    # Calibrated so 7 beams converging at isocenter produce ~1.0 Gy
+    BEAM_SCALE: float = 0.40
 
     def __init__(
         self,
@@ -55,18 +58,16 @@ class DoseCalculator:
         dose = np.zeros((self.grid_size, self.grid_size), dtype=np.float32)
 
         # Isocenter = tumor center (beams converge HERE, not at grid center)
-        isocenter = getattr(patient, 'tumor_center', None)
+        isocenter: Optional[Tuple[float, float]] = patient.tumor_center
 
         for beam in beams:
             dose += self._compute_single_beam(beam, patient.body_mask, isocenter)
-
-        # Keep raw accumulated dose — raw pass
 
         return dose.astype(np.float32)
 
     def _compute_single_beam(
         self, beam: Beam, body_mask: np.ndarray,
-        isocenter: tuple = None
+        isocenter: Optional[Tuple[float, float]] = None,
     ) -> np.ndarray:
         """
         Compute dose from a single beam converging on the isocenter (tumor center).
@@ -98,9 +99,7 @@ class DoseCalculator:
         depth_norm = (depth - depth.min()) / (depth.max() - depth.min() + 1e-6)
         attenuation = np.exp(-self.attenuation_mu * depth_norm * self.grid_size)
 
-        # Scale: 7 beams converging → ~1.0 at isocenter
-        BEAM_SCALE = 0.40
-        beam_dose = profile * attenuation * beam.dose_weight * BEAM_SCALE
+        beam_dose = profile * attenuation * beam.dose_weight * self.BEAM_SCALE
 
         # No dose outside patient body
         beam_dose *= body_mask.astype(np.float32)
@@ -131,6 +130,9 @@ class DoseCalculator:
                 np.mean(tumor_dose >= 0.95 * patient.prescription_dose)
             )
         else:
+            summary["tumor_d95"] = 0.0
+            summary["tumor_dmean"] = 0.0
+            summary["tumor_dmax"] = 0.0
             summary["tumor_coverage"] = 0.0
 
         # OAR metrics

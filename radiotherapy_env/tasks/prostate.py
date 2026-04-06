@@ -1,5 +1,4 @@
 """Task 1: Prostate (Easy)"""
-import numpy as np
 from .base_task import BaseTask
 from ..physics.phantom import PatientPhantom, ProstatePatientGenerator
 from ..reward.reward_fn import compute_reward

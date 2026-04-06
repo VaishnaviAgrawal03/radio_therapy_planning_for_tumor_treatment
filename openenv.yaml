@@ -11,12 +11,12 @@ description: >
   Simulates the real clinical workflow of a radiation oncologist.
 
 authors:
-  - name: "Hackathon Team"
-    email: "team@example.com"
+  - name: "Vaishnavi Agrawal"
+    email: "vagrawal_be22@thapar.edu"
 
-license: MIT
-repository: https://github.com/yourname/radiotherapy-env
-huggingface_space: https://huggingface.co/spaces/yourname/radiotherapy-planning-env
+
+repository: https://github.com/VaishnaviAgrawal03/Radiotherapy-Dose-Planning
+huggingface_space: https://huggingface.co/spaces/VaishnaviAgrawal/Radiotherapy-Dose-Planning
 docker_image: ghcr.io/yourname/radiotherapy-env:latest
 
 # ── Task Definitions ──────────────────────────────────────────────────────────

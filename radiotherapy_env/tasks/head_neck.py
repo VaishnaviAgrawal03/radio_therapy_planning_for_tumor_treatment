@@ -1,5 +1,4 @@
 """Task 2: Head & Neck (Medium)"""
-import numpy as np
 from .base_task import BaseTask
 from ..physics.phantom import HeadNeckPatientGenerator
 from ..reward.reward_fn import compute_reward
