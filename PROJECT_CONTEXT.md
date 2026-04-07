@@ -14,7 +14,6 @@ An AI agent learns to place and optimize radiation beams to maximize tumor dose 
 
 **Author:** Vaishnavi Agrawal (vagrawal_be22@thapar.edu)
 **Version:** 1.0.0
-**License:** MIT
 **Python:** >=3.10
 
 ---
