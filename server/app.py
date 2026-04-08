@@ -12,10 +12,10 @@ Endpoints:
     - GET /schema: Action/observation schemas
 
 Usage:
-    uvicorn server.app:app --host 0.0.0.0 --port 8000
+    uvicorn server.app:app --host 0.0.0.0 --port 7860
 """
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from server.models import RadiotherapyAction, RadiotherapyObservation
 from server.radiotherapy_environment import RadiotherapyEnvironment
 
@@ -60,8 +60,11 @@ def schema():
 
 
 @app.post("/reset")
-def reset(body: dict = None):
-    body = body or {}
+async def reset(request: Request):
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
     task = body.get("task", "prostate")
     result = env.reset(task=task)
     return result
@@ -78,7 +81,7 @@ def state():
     return env.state()
 
 
-def main(host: str = "0.0.0.0", port: int = 8000):
+def main(host: str = "0.0.0.0", port: int = 7860):
     """Entry point for uv run or python -m execution."""
     import uvicorn
     uvicorn.run(app, host=host, port=port)

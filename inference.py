@@ -24,9 +24,11 @@ from openai import OpenAI
 import radiotherapy_env  # noqa: F401 — registers gym envs
 
 # ── Configuration ─────────────────────────────────────────────────────────────
-API_KEY = os.getenv("HF_TOKEN") or os.getenv("API_KEY")
-API_BASE_URL = os.getenv("API_BASE_URL") or "https://router.huggingface.co/v1"
-MODEL_NAME = os.getenv("MODEL_NAME") or "Qwen/Qwen2.5-72B-Instruct"
+API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
+MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct")
+HF_TOKEN = os.getenv("HF_TOKEN")
+if HF_TOKEN is None:
+    raise ValueError("HF_TOKEN environment variable is required")
 
 TEMPERATURE = 0.3
 MAX_TOKENS = 100
@@ -86,7 +88,7 @@ def log_step(step: int, action: str, reward: float, done: bool, error: Optional[
 def log_end(success: bool, steps: int, score: float, rewards: List[float]) -> None:
     rewards_str = ",".join(f"{r:.2f}" for r in rewards)
     print(
-        f"[END] success={str(success).lower()} steps={steps} score={score:.3f} rewards={rewards_str}",
+        f"[END] success={str(success).lower()} steps={steps} score={score:.2f} rewards={rewards_str}",
         flush=True,
     )
 
@@ -223,8 +225,9 @@ def run_episode(client: OpenAI, env_id: str, task_key: str, max_steps: int,
             ]
             action_str = action_names[action]
 
+            last_error = info.get("last_action_error", None)
             log_step(step=step, action=action_str, reward=float(reward),
-                     done=done, error=None)
+                     done=done, error=last_error)
 
             history.append(f"Step {step}: {action_str} -> reward {reward:.2f}")
 
@@ -241,8 +244,7 @@ def run_episode(client: OpenAI, env_id: str, task_key: str, max_steps: int,
 
     finally:
         env.close()
-        log_end(success=success, steps=steps_taken, score=final_score,
-                rewards=rewards)
+        log_end(success=success, steps=steps_taken, score=final_score, rewards=rewards)
 
     return {
         "task": task_key,
@@ -256,11 +258,7 @@ def run_episode(client: OpenAI, env_id: str, task_key: str, max_steps: int,
 # ── Main ─────────────────────────────────────────────────────────────────────
 
 def main():
-    if not API_KEY:
-        print("[ERROR] No API key found. Set HF_TOKEN or API_KEY environment variable.", flush=True)
-        return
-
-    client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
+    client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
 
     all_results = {}
 
