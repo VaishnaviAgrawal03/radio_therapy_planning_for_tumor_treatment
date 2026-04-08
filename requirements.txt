@@ -9,16 +9,9 @@ Pillow>=9.0.0
 # Contour extraction (for rendering)
 scikit-image>=0.20.0
 
-# Gradio demo (HuggingFace Spaces)
-gradio>=4.0.0
-
-# Training (optional but recommended)
-stable-baselines3>=2.0.0
-torch>=2.0.0
-
-# Testing
-pytest>=7.0.0
-pytest-cov>=4.0.0
+# FastAPI server
+fastapi>=0.100.0
+uvicorn>=0.23.0
 
 # LLM inference (OpenAI-compatible client)
 openai>=1.0.0
